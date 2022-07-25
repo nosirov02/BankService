@@ -54,4 +54,10 @@ public class CardController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/getByNumber")
+    public ResponseEntity<?> getByNumber(@RequestParam("number") String number){
+        Card card = cardService.getByNumber(number);
+        return ResponseEntity.ok(card);
+    }
+
 }
