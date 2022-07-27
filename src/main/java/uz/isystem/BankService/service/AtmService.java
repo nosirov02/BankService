@@ -1,42 +1,66 @@
 package uz.isystem.BankService.service;
 
-import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Repository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import uz.isystem.BankService.exception.BadRequest;
 import uz.isystem.BankService.model.Atm;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.LinkedList;
 import java.util.List;
 
-@Repository
+@Service
 public class AtmService {
-    private final List<Atm> atmList;
-    private static int id = 1;
-
-
-    public AtmService() {
-        this.atmList = new LinkedList<>();
-    }
+    @Autowired
+    private JdbcConnection jdbcConnection;
 
     public Atm getAtm(Integer id) {
         return findAtm(id);
     }
 
     public Atm findAtm(Integer id) {
-        for (Atm atm : atmList) {
-            if (atm.getId().equals(id)) return atm;
+        try {
+            Statement statement = jdbcConnection.getStatement();
+            String Query = "SELECT * from atm where id = " + id;
+            ResultSet resultSet = statement.executeQuery(Query);
+            Atm atm = new Atm();
+            while (resultSet.next()) {
+                atm.setId(resultSet.getInt("id"));
+                atm.setNumber(resultSet.getString("number"));
+                atm.setPinCode(resultSet.getString("pincode"));
+                atm.setAmount(resultSet.getDouble("amount"));
+                atm.setAddress(resultSet.getString("address"));
+                atm.setStatus(resultSet.getBoolean("status"));
+                return atm;
+            }
+            throw new BadRequest("Atm not found");
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
-        throw new BadRequest("Atm not found");
     }
 
     public String createAtm(Atm atm) {
         checkAtm(atm);
-        atm.setId(id++);
-        atm.setAmount(0.0);
+        atm.setAmount(50000.0);
         atm.setStatus(false);
-        atmList.add(atm);
-        return "card created";
+        try {
+            Statement statement = jdbcConnection.getStatement();
+            String Query = "INSERT INTO atm (number, pincode, address, amount, status) values (" +
+                    "'" + atm.getNumber() + "'," +
+                    "'" + atm.getPinCode() + "'," +
+                    "'" + atm.getAddress() + "'," +
+                    "" + atm.getAmount() + "," +
+                    "" + atm.getStatus() + ")";
+            int i = statement.executeUpdate(Query);
+            if (i == 0) {
+                throw new BadRequest("Atm not added");
+            }
+            return "Atm added";
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void checkAtm(Atm atm) {
@@ -46,42 +70,73 @@ public class AtmService {
         if (String.valueOf(atm.getPinCode()).length() != 6) {
             throw new BadRequest("Atm pinCode error");
         }
+        try {
+            Statement statement = jdbcConnection.getStatement();
+            String Query = "Select * from atm where number = '" + atm.getNumber() + "'";
+            ResultSet resultSet = statement.executeQuery(Query);
+            if (resultSet.next()) {
+                throw new BadRequest("Atm already exist");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     public String updateAtm(Integer id, Atm atm) {
         checkAtm(atm);
-        Atm updatedAtm = findAtm(id);
-        updatedAtm.setPinCode(atm.getPinCode());
-        updatedAtm.setNumber(atm.getNumber());
-        updatedAtm.setAddress(atm.getAddress());
-        return "atm updated";
+        findAtm(id);
+        try {
+            Statement statement = jdbcConnection.getStatement();
+            String Query = "UPDATE atm set " +
+                    "number = '" + atm.getNumber() + "'," +
+                    "pincode = '" + atm.getPinCode() + "'," +
+                    "address = '" + atm.getAddress() + "'" +
+                    "where id = " + id;
+            int i = statement.executeUpdate(Query);
+            if (i == 0){
+                throw new BadRequest("Atm not updated");
+            }
+            return "atm updated";
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public String deleteAtm(Integer id) {
-        for (Atm atm : atmList) {
-            if (atm.getId().equals(id)) {
-                atmList.remove(atm);
-                return "atm deleted";
+        findAtm(id);
+        try {
+            Statement statement = jdbcConnection.getStatement();
+            String Query = "DELETE from atm where id = " + id;
+            int i = statement.executeUpdate(Query);
+            if (i == 0){
+                throw new BadRequest("Atm not deleted");
             }
+            return "atm deleted";
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
-        throw new BadRequest("atm not found");
     }
 
     public List<Atm> getAll() {
-        if (atmList.isEmpty()) {
-            throw new BadRequest("Atms not found");
+        try {
+            Statement statement = jdbcConnection.getStatement();
+            String Query = "SELECT * from atm" ;
+            ResultSet resultSet = statement.executeQuery(Query);
+            List<Atm> atmList = new LinkedList<>();
+            while (resultSet.next()) {
+                Atm atm = new Atm();
+                atm.setId(resultSet.getInt("id"));
+                atm.setNumber(resultSet.getString("number"));
+                atm.setPinCode(resultSet.getString("pincode"));
+                atm.setAmount(resultSet.getDouble("amount"));
+                atm.setAddress(resultSet.getString("address"));
+                atm.setStatus(resultSet.getBoolean("status"));
+                atmList.add(atm);
+            }
+            return atmList;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
-        return atmList;
     }
-
-   /* public String startAtm(Integer id){
-        Atm atm = findAtm(id);
-        atm.setStatus(true);
-        return "atm activated";
-    }
-
-    public String finishAtm(Integer id){
-        Atm atm = findAtm(id);
-        Double amount = atm.getAmount();
-    } */
 }

@@ -1,5 +1,6 @@
 package uz.isystem.BankService.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import uz.isystem.BankService.exception.BadRequest;
 import uz.isystem.BankService.model.Card;
@@ -12,20 +13,9 @@ import java.util.List;
 
 @Component
 public class CardService {
-    private String URL = "jdbc:postgresql://localhost:5432/isystem_db";
-    private String username = "postgres";
-    private String password = "root";
 
-    Connection connection;
-
-
-    public CardService() {
-        try {
-            connection = DriverManager.getConnection(URL, username, password);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
+    @Autowired
+    private JdbcConnection jdbcConnection;
 
     public Card getCard(Integer id) {
         return findCard(id);
@@ -33,17 +23,16 @@ public class CardService {
 
     public Card findCard(Integer id) {
         try {
-            Statement statement = connection.createStatement();
-            String Query = "Select * from card where id = " + id;
-            ResultSet resultSet = statement.executeQuery(Query);
+            PreparedStatement preparedStatement = jdbcConnection
+                    .getConnection().prepareStatement("SELECT * from card where id = ?");
+            preparedStatement.setInt(1, id);
+            ResultSet resultSet = preparedStatement.executeQuery();
             Card card = new Card();
-            while (resultSet.next()) {
+            if (resultSet.next()) {
                 convertCard(resultSet, card);
+                return card;
             }
-            if (card.getId() == null) {
-                throw new BadRequest("Card not found");
-            }
-            return card;
+            throw new BadRequest("Card not found");
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -51,17 +40,22 @@ public class CardService {
 
     public String createCard(Card card) {
         checkCard(card);
+        card.setStatus(false);
+        card.setAmount(0.0);
+        card.setDate(LocalDate.now().plusYears(5));
         try {
-            Statement statement = connection.createStatement();
-            card.setStatus(false);
-            card.setAmount(0.0);
-            card.setDate(LocalDate.now().plusYears(5));
-            String Query = "INSERT INTO card (name, number, pincode, date, amount, status) values " +
-                    "('" + card.getName() + "', " +
-                    "'" + card.getNumber() + "', " + card.getPinCode() + ", " +
-                    "'" + card.getDate() + "', " + card.getAmount() + ", " + card.getStatus() + ")";
-            boolean result = statement.execute(Query);
-            System.out.println(result);
+            PreparedStatement statement = jdbcConnection.getConnection()
+                    .prepareStatement("INSERT INTO card (name, number, pincode, date, amount, status) values (?,?,?,?,?,?)");
+            statement.setString(1, card.getName());
+            statement.setString(2, card.getNumber());
+            statement.setInt(3, card.getPinCode());
+            statement.setString(4, String.valueOf(card.getDate()));
+            statement.setDouble(5, card.getAmount());
+            statement.setBoolean(6, card.getStatus());
+            int i = statement.executeUpdate();
+            if (i == 0) {
+                throw new BadRequest("Card not created");
+            }
             return "Card added";
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -79,9 +73,10 @@ public class CardService {
             card.setName(card.getName().substring(0, 25));
         }
         try {
-            Statement statement = connection.createStatement();
-            String Query = "Select * from card where number = '" + card.getNumber() + "'";
-            ResultSet set = statement.executeQuery(Query);
+            PreparedStatement statement = jdbcConnection.getConnection()
+                    .prepareStatement("Select * from card where number = ?");
+            statement.setString(1, card.getNumber());
+            ResultSet set = statement.executeQuery();
             if (set.next()) {
                 throw new BadRequest("card is present");
             }
@@ -94,14 +89,16 @@ public class CardService {
         checkCard(card);
         findCard(id);
         try {
-            Statement statement = connection.createStatement();
-            String Query = "UPDATE card SET " +
-                    "name = '" + card.getName() + "', " +
-                    "pincode = " + card.getPinCode() + "," +
-                    "number = '" + card.getNumber() + "' " +
-                    "where id = " + id;
-            int i = statement.executeUpdate(Query);
-            System.out.println(i);
+            PreparedStatement statement = jdbcConnection.getConnection()
+                    .prepareStatement("UPDATE card SET name = ?, pincode = ?, number = ? where id = ?");
+            statement.setString(1, card.getName());
+            statement.setInt(2, card.getPinCode());
+            statement.setString(3, card.getNumber());
+            statement.setInt(4, card.getId());
+            int i = statement.executeUpdate();
+            if (i == 0) {
+                throw new BadRequest("Card not updated");
+            }
             return "card updated";
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -109,14 +106,16 @@ public class CardService {
     }
 
     public String deleteCard(Integer id) {
+        findCard(id);
         try {
-            Statement statement = connection.createStatement();
-            String Query = "DELETE from card where id = " + id;
-            int i = statement.executeUpdate(Query);
+            PreparedStatement statement = jdbcConnection.getConnection()
+                    .prepareStatement("DELETE FROM card  where id = ?");
+            statement.setInt(1, id);
+            int i = statement.executeUpdate();
             if (i == 0) {
-                throw new BadRequest("Card not found");
+                throw new BadRequest("Card not deleted");
             }
-            return "Card deleted";
+            return "card deleted";
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -124,9 +123,8 @@ public class CardService {
 
     public List<Card> getAll() {
         try {
-            Statement statement = connection.createStatement();
-            String Query = "Select * from card";
-            ResultSet resultSet = statement.executeQuery(Query);
+            PreparedStatement statement = jdbcConnection.getConnection().prepareStatement( "Select * from card");
+            ResultSet resultSet = statement.executeQuery();
             List<Card> cardList = new LinkedList<>();
             while (resultSet.next()) {
                 Card card = new Card();
@@ -175,9 +173,10 @@ public class CardService {
 
     public Card getByNumber(String number) {
         try {
-            Statement statement = connection.createStatement();
-            String Query = "Select * from card where number = '" + number + "'";
-            ResultSet resultSet = statement.executeQuery(Query);
+            PreparedStatement statement = jdbcConnection.getConnection()
+                    .prepareStatement("Select * from card where number = ?");
+            statement.setString(1, number);
+            ResultSet resultSet = statement.executeQuery();
             Card card = new Card();
             while (resultSet.next()) {
                 convertCard(resultSet, card);
